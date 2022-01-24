@@ -1,99 +1,43 @@
+Este es un contrato inteligente de solidez para administrar la nómina de un empleado basado en tokens ERC20. El propietario del contrato puede agregar nuevos tokens admitidos en el contrato y hacer una lista blanca de diferentes tipos de tokens para cada empleado, de modo que pueda retirar sus pagos en tokens de acuerdo con una distribución establecida por el empleado.
+
+El token predeterminado admitido es EURT, que es un token que representa la moneda EUR. También agregué el Token USD, USDT. Cualquier transacción que intente enviar ether al contrato de Nómina será revertida. El éter no está permitido.
+
+Los empleados pueden retirar su pago solo una vez al mes y, cada seis meses, pueden definir una nueva distribución de tokens, pero para los tokens incluidos en la lista blanca.
+
+Además de eso, el propietario del contrato puede bloquear/permitir pagos en caso de emergencia. Se encuentra disponible información adicional sobre cada empleado, pagos, distribuciones y tokens admitidos.
+
+En aras de la simplicidad, supongamos que EUR es un token ERC20
+// También supongamos que podemos confiar al 100% en el oráculo del tipo de cambio
+contrato PayrollInterface {
+  /* SOLO PROPIETARIO */
+  función addEmployee (dirección dirección de cuenta, dirección [] tokens permitidos, uint256 initialYearlyEURSalary);
+  función setEmployeeSalary(uint256 employeeId, uint256 yearlyEURSalary);
+  función removeEmployee(uint256 employeeId);
+
+  function addFunds() a pagar;
+  función scapeHatch();
+  // función añadirFondosToken()? // Usar applyAndCall o ERC223 tokenFallback
+
+  la función getEmployeeCount() constante devuelve (uint256);
+  función getEmployee (uint256 employeeId) rendimientos constantes (dirección de empleado); // Devuelve toda la información importante también
+
+  la función calculaPayrollBurnrate () constante devuelve (uint256); // Importe mensual de EUR gastado en salarios
+  la función calculaPayrollRunway () constante devuelve (uint256); // Días hasta que el contrato puede quedarse sin fondos
+
+  /* SOLO EMPLEADO */
+  función determineAllocation(dirección[] tokens, uint256[] distribución); // solo se puede llamar una vez cada 6 meses
+  funcion dia de pago(); // solo disponible una vez al mes
+
+  /* SOLO ORACLE */
+  función setExchangeRate (token de dirección, uint256 EURExchangeRate); // usa decimales del token
 
 
-# Payroll Smart Contract
+Consideraciones
 
-## The challenge
-```
-// For the sake of simplicity lets assume EUR is a ERC20 token
-// Also lets assume we can 100% trust the exchange rate oracle
-contract PayrollInterface {
-  /* OWNER ONLY */
-  function addEmployee(address accountAddress, address[] allowedTokens, uint256 initialYearlyEURSalary);
-  function setEmployeeSalary(uint256 employeeId, uint256 yearlyEURSalary);
-  function removeEmployee(uint256 employeeId);
-
-  function addFunds() payable;
-  function scapeHatch();
-  // function addTokenFunds()? // Use approveAndCall or ERC223 tokenFallback
-
-  function getEmployeeCount() constant returns (uint256);
-  function getEmployee(uint256 employeeId) constant returns (address employee); // Return all important info too
-
-  function calculatePayrollBurnrate() constant returns (uint256); // Monthly EUR amount spent in salaries
-  function calculatePayrollRunway() constant returns (uint256); // Days until the contract can run out of funds
-
-  /* EMPLOYEE ONLY */
-  function determineAllocation(address[] tokens, uint256[] distribution); // only callable once every 6 months
-  function payday(); // only callable once a month
-
-  /* ORACLE ONLY */
-  function setExchangeRate(address token, uint256 EURExchangeRate); // uses decimals from token
-}
-```
-
-## The solution
-This is a solidity smart contract to manage an employee payroll based on ERC20 tokens. The contract owner may
-add new supported tokens into the contract and whitelist different types of tokens for each employee, so they can withdraw their payments in tokens according to a distribution that is set by the employee.
-
-The default token supported is the EURT, which is a token that represents the EUR currency. I also added the USD Token, USDT. Any transaction that attempts to send ether to the Payroll contract will be reverted. Ether is not allowed.
-
-Employees are allowed to withdraw their payment only once a month and, each six months they can define a new token distribution, but for the whitelisted tokens.
-
-Besides that, the contract owner is able to block/allow payments in case of an emergency. Additional information about each employee, payments, distributions and supported tokens is available.
-
-
-
-### Constructor
-```solidity
-function Payroll(address _defaultOracle, address _tokenEURAddress, uint256 _EURExchangeRate) //default constructor with oracle address and default EUR token details
-```
-
-### Owner Functions
-```solidity
-function allowToken(address _employeeAddress, address _token, uint256 _EURExchangeRate) external;
-function addSupportedToken(address _token, uint256 _EURExchangeRate) public;
-function claimTokenFunds(address tokenAddress) external;
-function calculatePayrollBurnrate() public constant returns (uint256); // Monthly EUR amount spent in salaries
-function calculatePayrollRunway(address _token) external constant returns (uint256); // Days until the contract can run out of funds based on each token
-function blockPayments() external;
-function allowPayments() external;
-function setOracle(address _newOracleAddress) external;
-function destroy() external;
-
-function addEmployee(address _employeeAddress, uint256 _initialYearlyEURSalary) external;
-function getEmployee(address _employeeAddress) external constant returns (
-    uint256 _yearlyEURSalary,
-    uint256 _totalReceivedEUR,
-    address[] _allowedTokens);
-function removeEmployee(address _employeeAddress) external;
-function setEmployeeSalary(address _employeeAddress, uint256 _yearlyEURSalary) external;
-function getEmployeeCount() external constant returns (uint256);
-function getEmployeePayment(address _employeeAddress, address _token) external constant returns (
-    uint256 _EURExchangeRate,
-    uint _lastAllocationTime,
-    uint _lastPaymentTime,
-    uint256 _distributionMontlyAmount);
-```
-
-### Employee Functions
-```solidity
-function determineAllocation(address _token, uint256 _distributionMontlyAmount) external; // only callable once every 6 months
-function payday(address _token) external; // only callable once a month and releases the funds according to distribution so employee can withdraw
-```
-
-### Oracle Functions
-```solidity
-function setExchangeRate(address _token, uint256 _newEURExchangeRate) external; // uses decimals from token
-```
-
-### Considerations
- - Instead of passing a list of tokens with an arbitrary size to calculate 
- the distribution or receive payments, it now accepts only 1 token at time, so it prevents problems with maximum block size and we don't have to implement loop caching for arrays with arbitraty length;
- - The destroy function terminates the contract and returns the funds to the contract owner;
- - Implemented a very basic ERC20 EURT and USDT tokens without allowance in order to transfer token funds using
- a token contract. The EURT is the default token. More tokens can be easily added; It is based on tokens from Open Zeppelin lib;
- - Assumed we can trust 100% in the oracle exchange rates; It can be improved later;
- - The contract relies on a default oracle address and default EURT address provided via constructor args;
- - Added fallback functions for token and ether;
- - The test accounts are available on `script/ganache-cli.sh` script which uses custom balances to 
- execute the truffle test `test/PayrollContractTest.js`.
+    En lugar de pasar una lista de tokens con un tamaño arbitrario para calcular la distribución o recibir pagos, ahora acepta solo 1 token a la vez, por lo que evita problemas con el tamaño máximo de bloque y no tenemos que implementar el almacenamiento en caché de bucles para arreglos arbitrarios. longitud;
+    La función de destrucción rescinde el contrato y devuelve los fondos al propietario del contrato;
+    Implementó tokens ERC20 EURT y USDT muy básicos sin asignación para transferir fondos de token mediante un contrato de token. El EURT es el token predeterminado. Se pueden agregar fácilmente más fichas; Se basa en tokens de Open Zeppelin lib;
+    Supongamos que podemos confiar al 100% en los tipos de cambio de Oracle; Se puede mejorar más adelante;
+    El contrato se basa en una dirección Oracle predeterminada y una dirección EURT predeterminada proporcionada a través de argumentos de constructor;
+    Se agregaron funciones de respaldo para token y ether;
+    Las cuentas de prueba están disponibles en el script script/ganache-cli.sh que utiliza saldos personalizados para ejecutar la prueba de trufa test/PayrollContractTest.js. 
